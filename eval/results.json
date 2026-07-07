@@ -1,0 +1,64 @@
+{
+  "risk_detection_accuracy": 1.0,
+  "total_cases": 6,
+  "correct_cases": 6,
+  "cases": [
+    {
+      "id": "eval-001",
+      "expected_risk_types": [
+        "termination_without_notice"
+      ],
+      "predicted_risk_types": [
+        "termination_without_notice"
+      ],
+      "correct": true
+    },
+    {
+      "id": "eval-002",
+      "expected_risk_types": [
+        "salary_unclear"
+      ],
+      "predicted_risk_types": [
+        "salary_unclear"
+      ],
+      "correct": true
+    },
+    {
+      "id": "eval-003",
+      "expected_risk_types": [
+        "probation_unclear_or_long"
+      ],
+      "predicted_risk_types": [
+        "probation_unclear_or_long"
+      ],
+      "correct": true
+    },
+    {
+      "id": "eval-004",
+      "expected_risk_types": [
+        "non_compete_overreach"
+      ],
+      "predicted_risk_types": [
+        "non_compete_overreach"
+      ],
+      "correct": true
+    },
+    {
+      "id": "eval-005",
+      "expected_risk_types": [
+        "penalty_or_deduction_clause"
+      ],
+      "predicted_risk_types": [
+        "penalty_or_deduction_clause"
+      ],
+      "correct": true
+    },
+    {
+      "id": "eval-006",
+      "expected_risk_types": [],
+      "predicted_risk_types": [],
+      "correct": true
+    }
+  ],
+  "notes": "TODO[PERSON-1]: Expand heldout set after manual data review."
+}

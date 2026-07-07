@@ -1,0 +1,6 @@
+source,target,relation,evidence_source_id,manual_status,notes
+termination_without_notice,MANUAL_VERIFY_JO_LABOR_LAW_TERMINATION_NOTICE,may_be_related_to,MANUAL_VERIFY_JO_LABOR_LAW_TERMINATION_NOTICE,MANUAL_VERIFY,TODO[PERSON-1]: Validate this lightweight edge after source review.
+salary_unclear,MANUAL_VERIFY_JO_LABOR_LAW_WAGES,may_be_related_to,MANUAL_VERIFY_JO_LABOR_LAW_WAGES,MANUAL_VERIFY,TODO[PERSON-1]: Validate this lightweight edge after source review.
+probation_unclear_or_long,MANUAL_VERIFY_JO_LABOR_LAW_PROBATION,may_be_related_to,MANUAL_VERIFY_JO_LABOR_LAW_PROBATION,MANUAL_VERIFY,TODO[PERSON-1]: Validate this lightweight edge after source review.
+non_compete_overreach,MANUAL_VERIFY_JO_CIVIL_OR_LABOR_NON_COMPETE,may_be_related_to,MANUAL_VERIFY_JO_CIVIL_OR_LABOR_NON_COMPETE,MANUAL_VERIFY,TODO[PERSON-1]: Validate this lightweight edge after source review.
+penalty_or_deduction_clause,MANUAL_VERIFY_JO_LABOR_LAW_DEDUCTIONS,may_be_related_to,MANUAL_VERIFY_JO_LABOR_LAW_DEDUCTIONS,MANUAL_VERIFY,TODO[PERSON-1]: Validate this lightweight edge after source review.
