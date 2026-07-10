@@ -1,30 +1,38 @@
-# Python
-__pycache__/
-*.py[cod]
-.pytest_cache/
-.mypy_cache/
-.ruff_cache/
+.env
 .venv/
 venv/
-
-# Node / Next.js
+__pycache__/
+*.pyc
+.pytest_cache/
+outputs/
 node_modules/
 .next/
-out/
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
+.DS_Store
+.cache/
 
-# Environment
+# Local environment
 .env
-.env.local
-.env.*.local
+*.env
 
-# OS / editors
+# Python
+.venv/
+backend/.venv/
+api/.venv/
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+
+# Node / Next
+node_modules/
+web/node_modules/
+.next/
+web/.next/
+
+# OS
 .DS_Store
 Thumbs.db
-.vscode/
-.idea/
 
-# Local assistant/dev run logs
-.codex-run/
+# Generated outputs
+outputs/
+reports/
