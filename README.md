@@ -45,8 +45,6 @@ OLLAMA_BASE_URL=http://host.docker.internal:11434
 OLLAMA_MODEL=qwen3:4b
 ```
 
-Do not use a Groq key here. xAI keys usually start with `xai-` and must be sent to `https://api.x.ai/v1`.
-
 ## Architecture
 
 ```text
