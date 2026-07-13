@@ -1,6 +1,0 @@
-{"id":"eval-001","clause_text":"يجوز لصاحب العمل إنهاء العقد في أي وقت دون إشعار مسبق.","expected_risk_types":["termination_without_notice"]}
-{"id":"eval-002","clause_text":"يحدد الراتب لاحقاً حسب تقدير الشركة.","expected_risk_types":["salary_unclear"]}
-{"id":"eval-003","clause_text":"تكون مدة التجربة ستة أشهر قابلة للتمديد.","expected_risk_types":["probation_unclear_or_long"]}
-{"id":"eval-004","clause_text":"يلتزم الموظف بعد انتهاء العقد بعدم منافسة الشركة في أي مكان لمدة سنتين.","expected_risk_types":["non_compete_overreach"]}
-{"id":"eval-005","clause_text":"يحق للشركة خصم أي مبلغ تراه مناسباً من الراتب عند المخالفة.","expected_risk_types":["penalty_or_deduction_clause"]}
-{"id":"eval-006","clause_text":"يتقاضى الموظف راتباً شهرياً مقداره 500 دينار أردني.","expected_risk_types":[]}
