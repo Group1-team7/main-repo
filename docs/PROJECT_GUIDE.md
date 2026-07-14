@@ -4,9 +4,9 @@ This guide explains the Lawz AI JO capstone project in enough detail for teammat
 
 ## 1. Project Overview
 
-Lawz AI JO is a focused Arabic Retrieval-Augmented Generation (RAG) assistant for Jordanian labor-law information. It accepts an Arabic question, retrieves relevant legal chunks from Weaviate, builds a grounded Arabic prompt, calls a local Ollama `qwen3:4b` model, and returns an Arabic answer with backend-generated citations.
+Lawz AI JO is a focused Arabic Retrieval-Augmented Generation (RAG) assistant for Jordanian labor-law information. It accepts an Arabic question, retrieves relevant legal chunks from Weaviate, builds a grounded Arabic prompt, calls the configured LLM provider, and returns an Arabic answer with backend-generated citations.
 
-The project is intentionally small. It is not a broad legal chatbot. It demonstrates a clean RAG workflow with local Docker services, local generation, observability, and smoke evaluation.
+The project is intentionally small. It is not a broad legal chatbot. It demonstrates a clean RAG workflow with Docker services, xAI/Grok or optional Ollama generation, a Neo4j Text2Cypher proof of concept, self-hosted answer translation, observability, and evaluation tooling.
 
 ## 2. Problem Statement
 
@@ -23,8 +23,10 @@ The project does:
 - Retrieve relevant legal chunks from Weaviate.
 - Apply a simple lexical overlap rerank on top of vector retrieval.
 - Build a grounded Arabic prompt from retrieved context.
-- Call local Ollama with `qwen3:4b`.
+- Call xAI/Grok by default, with Ollama available as an optional local provider.
 - Return an Arabic answer, backend citations, retrieved chunk previews, confidence, and disclaimer.
+- Provide a separate Neo4j Text2Cypher Knowledge Graph endpoint.
+- Provide self-hosted Arabic-to-English answer translation through LibreTranslate.
 - Expose health, readiness, metrics, and structured logs.
 - Provide a simple Next.js web UI.
 - Provide a smoke evaluation script.
@@ -37,10 +39,7 @@ The project does not include:
 - DOCX parsing.
 - Contract review.
 - Risk scoring.
-- Neo4j.
-- Knowledge graph features.
 - LangChain.
-- Paid APIs.
 - OpenAI or Groq API calls.
 - Broad legal chatbot behavior.
 - Production legal-advice workflows.
@@ -53,11 +52,12 @@ User
   -> FastAPI on http://localhost:8001
   -> Weaviate on http://localhost:8081
   -> retrieved legal chunks
-  -> Ollama qwen3:4b on http://localhost:11434
+  -> xAI/Grok or Ollama
   -> Arabic answer with backend citations
+  -> optional LibreTranslate English translation
 ```
 
-Docker Compose runs Weaviate, the FastAPI API, and the web UI. Ollama does not run in Docker. It runs on the teammate's host machine, and the API container connects to it through:
+Docker Compose runs Weaviate, Neo4j, LibreTranslate, the FastAPI API, and the web UI. Ollama is optional and does not run in Docker; when enabled, the API container connects to host Ollama through:
 
 ```text
 OLLAMA_BASE_URL=http://host.docker.internal:11434
@@ -70,16 +70,18 @@ OLLAMA_BASE_URL=http://host.docker.internal:11434
 Creates the FastAPI application. It defines:
 
 - `GET /healthz` for basic API health.
-- `GET /readyz` for Weaviate and Ollama readiness checks.
+- `GET /readyz` for Weaviate, Neo4j, and selected LLM provider readiness checks.
 - `POST /rag/answer` for the main RAG answer endpoint.
+- `POST /kg/query` for the Knowledge Graph Text2Cypher endpoint.
+- `POST /translate` for Arabic-to-English machine translation.
 - CORS settings for the web UI.
 - Observability middleware and metrics setup.
 
-The route catches Ollama generation errors and returns a clean service-unavailable response.
+The routes catch LLM, KG, and translation errors and return clean API responses.
 
 ### `api/settings.py`
 
-Defines environment-driven settings using Pydantic settings. Important values include Weaviate URL/class, embedding model, retrieval limits, Ollama URL/model, timeout, API URL, web URL, and CORS origin.
+Defines environment-driven settings using Pydantic settings. Important values include Weaviate URL/class, embedding model, retrieval limits, xAI/Ollama provider settings, Neo4j settings, LibreTranslate settings, API URL, web URL, and CORS origin.
 
 ### `api/models.py`
 
@@ -89,8 +91,12 @@ Defines Pydantic request and response models:
 - `Citation`
 - `RetrievedChunk`
 - `RAGResponse`
+- `KGRequest`
+- `KGResponse`
 - `HealthResponse`
 - `ReadyResponse`
+- `TranslateRequest`
+- `TranslateResponse`
 
 These models keep the API response shape explicit and testable.
 
@@ -115,13 +121,22 @@ Citations are created by the backend from retrieved chunks. The LLM is not trust
 
 ### `api/generator.py`
 
-Calls Ollama through HTTP using `httpx`. It uses the `/api/chat` endpoint with:
+Calls the configured LLM provider through HTTP using `httpx`.
 
-- model: `qwen3:4b`
-- temperature: `0.1`
-- `stream: false`
+Supported providers:
+
+- `xai` / `grok`, using the OpenAI-compatible chat completions API at `XAI_BASE_URL`.
+- `ollama`, using the local `/api/chat` endpoint.
 
 It removes `<think>...</think>` blocks from model output and returns an abstention message if the output is empty.
+
+### `api/kg.py`
+
+Implements the Neo4j Text2Cypher proof of concept. It builds schema-bounded Cypher with the configured LLM, validates read-only Cypher, executes it against Neo4j, and serializes records, nodes, relationships, generated Cypher, and an Arabic summary.
+
+### `api/translation.py`
+
+Calls LibreTranslate for Arabic-to-English answer translation. Translation is a UI convenience only; the Arabic answer remains the authoritative legal-language response.
 
 ### `api/observability.py`
 
@@ -157,6 +172,10 @@ first_chunk_id: official_labor_law_art_002_p01
 last_chunk_id: betterwork_guide_page_067
 ```
 
+### `api/seed_neo4j.py`
+
+Seeds the Neo4j proof-of-concept graph from `api/seed_graph.json`.
+
 ### `api/seed_chunks.json`
 
 JSON array containing the legal chunks used for Weaviate seeding. Each chunk includes:
@@ -177,6 +196,10 @@ The current seed file contains 73 legal chunks.
 
 Small smoke evaluation fixture. It contains 5 Arabic test questions and expected topic/reference hints where available.
 
+### `data/kg_questions.json`
+
+Knowledge Graph evaluation fixture. It starts empty until reviewed question/gold Cypher pairs are added.
+
 ### `eval_rag_smoke.py`
 
 Command-line smoke evaluation script. It calls the live API, measures latency, checks answer presence, citation presence, abstention count, retrieval hits when expected chunk IDs exist, and reference hits when expected reference text exists.
@@ -192,28 +215,26 @@ outputs/rag_smoke_results.json
 Defines the local stack:
 
 - `weaviate` on host port `8081`.
+- `neo4j` on host ports `7474` and `7687`.
 - `api` on host port `8001`.
+- `libretranslate` as an internal Docker service on port `5000`.
 - `web` on host port `3001`.
 
-It also maps `host.docker.internal` so the API container can reach host Ollama.
+It also maps `host.docker.internal` so the API container can reach host Ollama when `LLM_PROVIDER=ollama`.
 
 ### `api/Dockerfile`
 
 Builds the Python API image. It installs CPU-only Torch first, then installs `requirements.txt`, copies the API package and seed script, and starts Uvicorn.
 
-### `web/pages/index.js`
+### `web/pages/index.js`, `web/pages/rag.js`, and `web/pages/kg.js`
 
-Simple Next.js page with:
+Next.js pages for the home screen, RAG assistant, and KG assistant. The RAG and KG result views include:
 
-- Project title.
-- Arabic subtitle.
-- Text area for questions.
-- Ask button.
-- Sample questions.
-- Answer display.
-- Citations display.
-- Retrieved chunks display.
-- Disclaimer display.
+- Arabic legal answer display.
+- Citations or graph entities where available.
+- Retrieved evidence or technical details.
+- Copy answer action.
+- English translation action through `web/components/TranslationToggle.js`.
 
 ### `web/package.json`
 
@@ -296,18 +317,22 @@ The API builds a grounded Arabic prompt from the top retrieved chunks. The promp
 - Say clearly when context is insufficient.
 - Do not output `<think>`.
 
-### Ollama Generation
+### Configured LLM Generation
 
-The API calls:
+The default fast path is xAI/Grok:
 
 ```text
-http://host.docker.internal:11434/api/chat
+LLM_PROVIDER=xai
+XAI_BASE_URL=https://api.x.ai/v1
+XAI_MODEL=grok-4.3
 ```
 
-with model:
+Ollama remains available as an optional local provider:
 
 ```text
-qwen3:4b
+LLM_PROVIDER=ollama
+OLLAMA_BASE_URL=http://host.docker.internal:11434
+OLLAMA_MODEL=qwen3:4b
 ```
 
 ### Response With Backend Citations
@@ -338,10 +363,10 @@ This model supports multilingual retrieval and works well with E5 prefixes:
 ### Generator
 
 ```text
-Ollama qwen3:4b
+xAI/Grok by default, Ollama qwen3:4b as an optional local provider
 ```
 
-This model runs locally through Ollama. It can be slow on typical laptops. In the successful local run, some answers took around 2-4 minutes.
+The xAI path is the recommended fast path. The Ollama path runs locally through Ollama and can be slow on typical laptops.
 
 ## 9. Data
 
@@ -390,23 +415,58 @@ Each citation returned by the API includes:
 - `topic`
 - `source_page`
 
+### Knowledge Graph Data
+
+Neo4j seed data lives in:
+
+```text
+api/seed_graph.json
+```
+
+It is loaded by:
+
+```bash
+python -m api.seed_neo4j
+```
+
+### Translation Data
+
+LibreTranslate stores downloaded or prepared language assets in the Docker volume:
+
+```text
+libretranslate_models
+```
+
 ## 10. How To Run On Windows
 
-Recommended path for teammates: Windows PowerShell + Docker Desktop + Ollama Windows app.
+Recommended path for teammates: Windows PowerShell + Docker Desktop + xAI API key.
 
-Do not run this from WSL unless you know your Docker/Ollama networking.
-
-Before running commands, make sure Docker Desktop is installed and running, Ollama for Windows is installed, and `qwen3:4b` is pulled locally. `jq` is optional on Windows; the documented commands do not require it.
+Do not run this from WSL unless you know your Docker networking. `jq` is optional on Windows; the documented commands do not require it.
 
 ```powershell
 git clone <repo-url>
 cd <repo-folder>
 Copy-Item .env.example .env
+notepad .env
+```
 
+Set a real `XAI_API_KEY` in `.env`. Keep this value when the API runs through Docker Compose:
+
+```env
+LIBRETRANSLATE_URL=http://libretranslate:5000
+```
+
+Optional Ollama setup:
+
+```powershell
 ollama pull qwen3:4b
 ollama list
 curl.exe http://localhost:11434/api/tags
+```
 
+Use Ollama only if `.env` sets `LLM_PROVIDER=ollama`.
+
+```powershell
 docker compose -p lawz-ai-jo up -d --build
 docker compose -p lawz-ai-jo ps
 
@@ -414,8 +474,11 @@ curl.exe http://localhost:8001/healthz
 curl.exe http://localhost:8001/readyz
 
 docker compose -p lawz-ai-jo exec api python -m api.seed_weaviate
+docker compose -p lawz-ai-jo exec -T api python -m api.seed_neo4j
 
 curl.exe -X POST http://localhost:8001/rag/answer -H "Content-Type: application/json" -d "{\"question\":\"هل يجوز إنهاء عقد العمل بدون إشعار؟\",\"k\":5}"
+curl.exe -X POST http://localhost:8001/kg/query -H "Content-Type: application/json" -d "{\"question\":\"ما المواد المرتبطة بإنهاء عقد العمل؟\"}"
+curl.exe -X POST http://localhost:8001/translate -H "Content-Type: application/json" -d "{\"text\":\"يجوز للعامل إنهاء العقد في الحالات التي يحددها القانون.\"}"
 ```
 
 Open:
@@ -426,17 +489,24 @@ http://localhost:3001
 
 ## 11. How To Run On Linux
 
-Ollama still runs on the host. Start Ollama and pull the model:
+Create `.env` and set `XAI_API_KEY`:
+
+```bash
+cp .env.example .env
+$EDITOR .env
+```
+
+Keep this value when the API runs through Docker Compose:
+
+```env
+LIBRETRANSLATE_URL=http://libretranslate:5000
+```
+
+Optional Ollama setup:
 
 ```bash
 ollama pull qwen3:4b
 curl http://localhost:11434/api/tags
-```
-
-Create `.env`:
-
-```bash
-cp .env.example .env
 ```
 
 Start the stack:
@@ -457,6 +527,7 @@ Seed:
 
 ```bash
 docker compose -p lawz-ai-jo exec api python -m api.seed_weaviate
+docker compose -p lawz-ai-jo exec -T api python -m api.seed_neo4j
 ```
 
 Ask:
@@ -465,6 +536,14 @@ Ask:
 curl -X POST http://localhost:8001/rag/answer \
   -H "Content-Type: application/json" \
   -d '{"question":"هل يجوز إنهاء عقد العمل بدون إشعار؟","k":5}'
+
+curl -X POST http://localhost:8001/kg/query \
+  -H "Content-Type: application/json" \
+  -d '{"question":"ما المواد المرتبطة بإنهاء عقد العمل؟"}'
+
+curl -X POST http://localhost:8001/translate \
+  -H "Content-Type: application/json" \
+  -d '{"text":"يجوز للعامل إنهاء العقد في الحالات التي يحددها القانون."}'
 ```
 
 ## 12. Troubleshooting History
@@ -523,7 +602,7 @@ python -m pip install httpx
 
 ### Slow Generation
 
-Issue: `qwen3:4b` generation was slow, taking around 2-4 minutes per answer.
+Issue: Optional `qwen3:4b` generation was slow, taking around 2-4 minutes per answer.
 
 Fix: Use a longer timeout for evaluation:
 
@@ -531,12 +610,38 @@ Fix: Use a longer timeout for evaluation:
 python eval_rag_smoke.py --api-url http://localhost:8001 --timeout 300 --output outputs/rag_smoke_results.json
 ```
 
+### Translation Unavailable
+
+Issue: `POST /translate` returns `503`.
+
+Fix: Check the `libretranslate` container and confirm the API container uses the Docker service URL:
+
+```env
+LIBRETRANSLATE_URL=http://libretranslate:5000
+```
+
+Use `http://localhost:5000` only when the API itself runs directly on the host.
+
+### xAI Not Ready
+
+Issue: `/readyz` reports that the LLM provider is not ready.
+
+Fix: Confirm `.env` contains a real xAI key and the expected model settings:
+
+```env
+LLM_PROVIDER=xai
+XAI_API_KEY=xai-...
+XAI_BASE_URL=https://api.x.ai/v1
+XAI_MODEL=grok-4.3
+```
+
 ## 13. Known Limitations
 
 - Not legal advice.
 - Small legal corpus.
 - Small smoke evaluation.
-- Slow local generation.
+- Optional local generation can be slow.
+- Machine translation is convenience-only and may need review.
 - Confidence score is approximate.
 - LLM wording may need legal review.
 
@@ -548,6 +653,7 @@ python eval_rag_smoke.py --api-url http://localhost:8001 --timeout 300 --output 
 - Add a smaller model option.
 - Improve frontend loading and progress feedback.
 - Add a dataset card.
+- Add reviewed KG evaluation fixtures.
 - Add optional contract upload later.
 - Add optional report export later.
 - Explore possible hosted deployment.
@@ -566,7 +672,7 @@ docker compose -p lawz-ai-jo up -d --build
 docker compose -p lawz-ai-jo down
 ```
 
-### Stop And Delete Weaviate Volume
+### Stop And Delete Volumes
 
 ```powershell
 docker compose -p lawz-ai-jo down -v
@@ -591,16 +697,36 @@ curl.exe http://localhost:8001/readyz
 curl.exe http://localhost:11434/api/tags
 ```
 
+Only needed when using `LLM_PROVIDER=ollama`.
+
 ### Seed Weaviate
 
 ```powershell
 docker compose -p lawz-ai-jo exec api python -m api.seed_weaviate
 ```
 
+### Seed Neo4j
+
+```powershell
+docker compose -p lawz-ai-jo exec -T api python -m api.seed_neo4j
+```
+
 ### Ask A Question
 
 ```powershell
 curl.exe -X POST http://localhost:8001/rag/answer -H "Content-Type: application/json" -d "{\"question\":\"هل يجوز إنهاء عقد العمل بدون إشعار؟\",\"k\":5}"
+```
+
+### Ask The Knowledge Graph
+
+```powershell
+curl.exe -X POST http://localhost:8001/kg/query -H "Content-Type: application/json" -d "{\"question\":\"ما المواد المرتبطة بإنهاء عقد العمل؟\"}"
+```
+
+### Translate Text
+
+```powershell
+curl.exe -X POST http://localhost:8001/translate -H "Content-Type: application/json" -d "{\"text\":\"يجوز للعامل إنهاء العقد في الحالات التي يحددها القانون.\"}"
 ```
 
 ### Metrics
