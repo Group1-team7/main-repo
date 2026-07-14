@@ -15,6 +15,7 @@ The project is intentionally focused. It answers questions about Jordanian labor
 - Returns an insufficient-evidence answer when the retrieved context is not enough.
 - Clears citations for insufficient or weak-evidence answers so unrelated references are not shown.
 - Provides a separate Neo4j Text2Cypher Knowledge Graph proof of concept at `POST /kg/query`.
+- Offers Arabic-to-English machine translation for displayed RAG and KG answers through a self-hosted LibreTranslate service at `POST /translate`.
 
 ## What It Does Not Do
 
@@ -143,6 +144,34 @@ Teammate ownership boundary: `api/kg.py` contains `TODO(KG teammate):` sections 
 
 Never commit the real `.env` file or a real `XAI_API_KEY`.
 
+## Translation
+
+The API exposes a small translation endpoint for UI convenience:
+
+```text
+POST /translate
+```
+
+It sends Arabic answer text to LibreTranslate and returns English text. Translation is machine-generated only; the Arabic legal answer remains the authoritative version shown by the app.
+
+Docker Compose starts LibreTranslate as an internal service and the API reaches it at `http://libretranslate:5000`. Keep that value in `.env` when running the API through Docker Compose. The first start can take longer while LibreTranslate prepares or downloads language assets.
+
+Relevant files:
+
+- `api/translation.py`
+- `tests/test_translation.py`
+- `web/components/TranslationToggle.js`
+
+Environment variables:
+
+```env
+# Use this value when the API runs inside Docker Compose.
+LIBRETRANSLATE_URL=http://libretranslate:5000
+LIBRETRANSLATE_TIMEOUT_SECONDS=30
+```
+
+If you run the API directly on the host and LibreTranslate is also exposed on the host, override it with `LIBRETRANSLATE_URL=http://localhost:5000` for that local run.
+
 ## Services And Ports
 
 | Service | URL | Notes |
@@ -152,6 +181,7 @@ Never commit the real `.env` file or a real `XAI_API_KEY`.
 | Weaviate | http://localhost:8081 | Vector database |
 | Neo4j Browser | http://localhost:7474 | Knowledge graph database |
 | Neo4j Bolt | bolt://localhost:7687 | Driver connection |
+| LibreTranslate | http://libretranslate:5000 | Internal Docker service used by the API |
 | Metrics | http://localhost:8001/metrics/ | Prometheus text |
 | Ollama | http://localhost:11434 | Only needed when `LLM_PROVIDER=ollama` |
 
@@ -305,6 +335,11 @@ API_URL=http://api:8000
 NEXT_PUBLIC_API_URL=http://localhost:8001
 
 WEB_ORIGIN=http://localhost:3001
+
+# Self-hosted Arabic-to-English translation
+# Use http://localhost:5000 only when the API runs directly on the host.
+LIBRETRANSLATE_URL=http://libretranslate:5000
+LIBRETRANSLATE_TIMEOUT_SECONDS=30
 ```
 
 Do not commit `.env`.
@@ -406,6 +441,30 @@ Response includes:
 - `row_count`
 - `disclaimer`
 
+Translation endpoint:
+
+```text
+POST /translate
+```
+
+Request:
+
+```json
+{
+  "text": "يجوز للعامل إنهاء العقد في الحالات التي يحددها القانون."
+}
+```
+
+Response:
+
+```json
+{
+  "translated_text": "The worker may terminate the contract in the cases defined by law."
+}
+```
+
+The endpoint returns `503` when LibreTranslate is unavailable and `502` when the upstream response is invalid.
+
 ## Web UI
 
 The web UI:
@@ -415,6 +474,7 @@ The web UI:
 - Shows citations only when the backend returns them.
 - Shows a subtle no-citations message for insufficient evidence.
 - Keeps retrieved chunks available in a collapsed section.
+- Provides copy and English-translation actions on RAG and KG answers.
 - Shows loading and error states.
 
 Open:
@@ -536,6 +596,7 @@ Safe local validation commands:
 ```bash
 python -m compileall -q api tests eval_kg.py eval_rag_smoke.py
 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest -q
+pytest tests/test_translation.py
 docker compose config --services
 ```
 
@@ -549,6 +610,7 @@ These commands do not run live xAI calls, do not start Docker containers, and do
 - Docker Desktop not running: start Docker Desktop and wait until it is ready.
 - Neo4j is not ready: set `NEO4J_PASSWORD` in `.env`, rebuild/start the stack, and check `http://localhost:7474`.
 - Weaviate returns no useful answers: make sure seeding was run with `python -m api.seed_weaviate` inside the API container.
+- Translation is unavailable: check the `libretranslate` container health and confirm `LIBRETRANSLATE_URL` points to `http://libretranslate:5000` inside Docker.
 - `/metrics` redirects to `/metrics/`: use `curl.exe -L http://localhost:8001/metrics` or open `http://localhost:8001/metrics/`.
 - `jq` may not be installed on Windows. It is optional.
 
@@ -560,7 +622,7 @@ Stop containers:
 docker compose -p lawz-ai-jo down
 ```
 
-Delete containers and the Weaviate/Neo4j volumes:
+Delete containers and the Weaviate/Neo4j/LibreTranslate volumes:
 
 ```powershell
 docker compose -p lawz-ai-jo down -v
